@@ -8,11 +8,13 @@ let package = Package(
         .library(name: "RoomModel", targets: ["RoomModel"]),
         .library(name: "RoomGeometry", targets: ["RoomGeometry"]),
         .library(name: "RoomStore", targets: ["RoomStore"]),
+        .library(name: "RoomViewer", targets: ["RoomViewer"]),
     ],
     targets: [
         .target(name: "RoomModel"),
         .target(name: "RoomGeometry", dependencies: ["RoomModel"]),
         .target(name: "RoomStore", dependencies: ["RoomModel"]),
+        .target(name: "RoomViewer", dependencies: ["RoomModel", "RoomGeometry"]),
         .testTarget(name: "RoomModelTests", dependencies: ["RoomModel"]),
         .testTarget(name: "RoomGeometryTests", dependencies: ["RoomGeometry"]),
         .testTarget(name: "RoomStoreTests", dependencies: ["RoomStore"]),

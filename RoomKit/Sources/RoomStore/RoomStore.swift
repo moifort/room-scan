@@ -78,7 +78,12 @@ public struct RoomStore: Sendable {
             at: rootDirectory, includingPropertiesForKeys: nil)) ?? []
 
         return folders.compactMap(entry(atFolder:))
-            .sorted { $0.metadata.createdAt > $1.metadata.createdAt }
+            .sorted {
+                // Ordre total : à date égale, l'identifiant tranche, pour que
+                // la liste ne change pas d'ordre d'un affichage à l'autre.
+                ($0.metadata.createdAt, $0.id.uuidString)
+                    > ($1.metadata.createdAt, $1.id.uuidString)
+            }
     }
 
     public func load(id: UUID) throws -> ScannedRoom {
@@ -123,15 +128,38 @@ public struct RoomStore: Sendable {
         return json?["schemaVersion"] as? Int
     }
 
+    /// ISO 8601 **avec** les fractions de seconde. La variante standard tronque
+    /// à la seconde : deux pièces enregistrées coup sur coup deviendraient
+    /// indiscernables et la bibliothèque afficherait un ordre arbitraire.
+    private func makeDateFormatter() -> ISO8601DateFormatter {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }
+
     private var encoder: JSONEncoder {
+        let formatter = makeDateFormatter()
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(formatter.string(from: date))
+        }
         return encoder
     }
 
     private var decoder: JSONDecoder {
+        let formatter = makeDateFormatter()
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let text = try decoder.singleValueContainer().decode(String.self)
+            guard let date = formatter.date(from: text) else {
+                throw DecodingError.dataCorrupted(
+                    .init(
+                        codingPath: decoder.codingPath,
+                        debugDescription: "Date illisible : \(text)"))
+            }
+            return date
+        }
         return decoder
     }
 }

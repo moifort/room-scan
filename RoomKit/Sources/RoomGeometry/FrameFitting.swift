@@ -6,7 +6,9 @@ import RoomModel
 /// dans le cadre, et la position de départ de la caméra.
 public enum FrameFitting {
     /// Marge autour de la pièce, pour ne pas coller aux bords de l'écran.
-    public static let margin: Float = 1.15
+    /// Vue de biais, la pièce est plus large que son grand côté : cette marge
+    /// absorbe l'écart sans reculer jusqu'à la rendre minuscule.
+    public static let margin: Float = 1.32
 
     public static func distance(
         boundingRadius: Float, verticalFieldOfView: Float, aspectRatio: Float
@@ -22,7 +24,10 @@ public enum FrameFitting {
         for room: ScannedRoom, verticalFieldOfView: Float, aspectRatio: Float
     ) -> OrbitCamera {
         let floorCenter = room.floor.center
-        let radius = max(room.floor.boundingRadius, 1)
+        // Le demi-grand côté, et non la demi-diagonale : vue de biais, la
+        // diagonale ne se projette jamais entièrement à l'écran, et cadrer
+        // dessus laisse la maquette perdue au milieu du vide.
+        let radius = max(room.floor.size.max() / 2, 1)
         return OrbitCamera(
             target: SIMD3(floorCenter.x, room.ceilingHeight / 3, floorCenter.y),
             distance: distance(

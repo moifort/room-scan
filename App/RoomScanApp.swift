@@ -1,11 +1,13 @@
-import SwiftUI
 import RoomModel
+import RoomViewer
+import SwiftUI
 
 @main
 struct RoomScanApp: App {
     var body: some SwiftUI.Scene {
         WindowGroup {
-            Text("RoomScan — \(FurnitureCategory.sofa.displayName)")
+            RoomMaquetteView(room: .demoLivingRoom)
+                .ignoresSafeArea()
         }
     }
 }

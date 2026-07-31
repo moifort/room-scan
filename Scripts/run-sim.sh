@@ -22,6 +22,8 @@ xcrun simctl install "$SIM" "$APP"
 xcrun simctl launch "$SIM" "$BUNDLE_ID" >/dev/null
 
 mkdir -p "$(dirname "$SHOT")"
-sleep 3
+# Le tout premier rendu RealityKit compile ses shaders Metal : capturer trop
+# tôt donne un écran blanc qui fait croire à un bug de rendu.
+sleep 6
 xcrun simctl io "$SIM" screenshot --type=png "$SHOT" >/dev/null 2>&1
 echo "Capture : $SHOT"
