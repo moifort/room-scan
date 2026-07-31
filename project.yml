@@ -21,6 +21,8 @@ targets:
         product: RoomStore
       - package: RoomKit
         product: RoomViewer
+      - package: RoomKit
+        product: RoomCapture
     info:
       path: App/Info.plist
       properties:
