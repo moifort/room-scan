@@ -1,0 +1,33 @@
+name: RoomScan
+options:
+  bundleIdPrefix: com.thibautmottet
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+packages:
+  RoomKit:
+    path: RoomKit
+targets:
+  RoomScan:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: RoomKit
+        product: RoomModel
+      - package: RoomKit
+        product: RoomGeometry
+      - package: RoomKit
+        product: RoomStore
+      - package: RoomKit
+        product: RoomViewer
+      - package: RoomKit
+        product: RoomCapture
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: RoomScan
+        NSCameraUsageDescription: RoomScan utilise la caméra et le LiDAR pour scanner vos pièces.
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
