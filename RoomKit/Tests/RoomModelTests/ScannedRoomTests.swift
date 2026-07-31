@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import simd
 @testable import RoomModel
 
 @Test func scannedRoomSurvivesAJSONRoundTrip() throws {
@@ -22,6 +23,27 @@ import Testing
     #expect(room.openings.contains { $0.kind == .door })
     #expect(room.openings.contains { $0.kind == .window })
     #expect(room.furniture.allSatisfy { $0.height > 0 && $0.footprint.x > 0 && $0.footprint.y > 0 })
+}
+
+@Test func demoRoomFurnitureFitsInsideTheFloor() {
+    let room = ScannedRoom.demoLivingRoom
+    let halfSize = room.floor.size / 2
+    let center = room.floor.center
+
+    // Un meuble qui traverse un mur trahirait une donnée d'exemple bâclée, et
+    // ferait douter du rendu plutôt que de la donnée.
+    for piece in room.furniture {
+        let halfWidth = piece.footprint.x / 2
+        let halfDepth = piece.footprint.y / 2
+        // Emprise de la boîte orientée, projetée sur chaque axe.
+        let reach = SIMD2(
+            abs(halfWidth * cos(piece.yaw)) + abs(halfDepth * sin(piece.yaw)),
+            abs(halfWidth * sin(piece.yaw)) + abs(halfDepth * cos(piece.yaw)))
+        let offset = simd_abs(piece.groundPosition - center)
+
+        #expect(offset.x + reach.x <= halfSize.x + 0.02)
+        #expect(offset.y + reach.y <= halfSize.y + 0.02)
+    }
 }
 
 @Test func absurdDimensionsAreClampedRatherThanStored() {

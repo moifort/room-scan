@@ -25,7 +25,7 @@ extension ScannedRoom {
 
         let furniture = [
             FurniturePiece(
-                category: .sofa, center: [-1.1, 0.4, 0.9],
+                category: .sofa, center: [-1.0, 0.4, 0.9],
                 footprint: [2.1, 0.95], height: 0.8, yaw: 0, confidence: .high),
             FurniturePiece(
                 category: .table, center: [-1.0, 0.22, -0.1],
