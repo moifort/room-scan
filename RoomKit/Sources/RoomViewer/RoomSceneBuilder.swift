@@ -62,6 +62,12 @@ public final class RoomSceneBuilder {
                 color: UIColor(white: 0.88, alpha: 1), isMetallic: false)])
         entity.position = [room.floor.center.x, -0.01, room.floor.center.y]
         entity.name = "floor"
+
+        // Le sol est une cible tactile pour que « toucher à côté d'un meuble »
+        // soit un événement reçu, et non l'absence d'événement : c'est ce qui
+        // permet de désélectionner sans second geste concurrent.
+        entity.generateCollisionShapes(recursive: false)
+        entity.components.set(InputTargetComponent())
         return entity
     }
 
