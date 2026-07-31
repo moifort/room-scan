@@ -41,53 +41,54 @@ struct ScanFlowView: View {
     private var capture: some View {
         RoomCaptureScreen(controller: controller)
             .ignoresSafeArea()
-            .overlay(alignment: .bottom) { captureFooter }
+            .overlay(alignment: .top) { captureHint }
+            .overlay { processingOverlay }
             .navigationTitle("Scan de la pièce")
             .navigationBarTitleDisplayMode(.inline)
     }
 
-    /// Sans bouton de fin, un scan ne se conclut jamais : c'est l'arrêt de la
-    /// session qui déclenche le post-traitement et produit la pièce.
+    /// Consigne et diagnostic en haut : le bas de l'écran appartient à RoomPlan,
+    /// qui y affiche l'aperçu 3D du scan en cours.
     @ViewBuilder
-    private var captureFooter: some View {
-        VStack(spacing: 12) {
-            if controller.isScanning {
-                Text("Parcourez la pièce en visant les murs, puis touchez Terminer.")
-                    .font(.footnote)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.white)
-
-                Button {
-                    controller.finish()
-                } label: {
-                    Text("Terminer le scan")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+    private var captureHint: some View {
+        if controller.isScanning {
+            Text("Parcourez la pièce en visant les murs, puis touchez Terminer.")
+                .font(.footnote)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.45), in: Capsule())
+                .padding(.horizontal, 24)
+                .padding(.top, 8)
+        } else if controller.phase != .processing {
+            // Tant que la session n'a pas démarré, dire où en est l'app plutôt
+            // que de laisser un écran noir sans explication.
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Préparation du scan…")
+                    .font(.headline)
+                ForEach(controller.diagnostics, id: \.self) { line in
+                    Text(line)
+                        .font(.caption.monospaced())
+                        .opacity(0.85)
                 }
-                .buttonStyle(.borderedProminent)
-            } else if controller.phase == .processing {
-                ProgressView("Analyse de la pièce…")
-                    .tint(.white)
-                    .foregroundStyle(.white)
-            } else {
-                // Tant que la session n'a pas démarré, dire où en est l'app
-                // plutôt que de laisser un écran noir sans explication.
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Préparation du scan…")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                    ForEach(controller.diagnostics, id: \.self) { line in
-                        Text(line)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.white.opacity(0.85))
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(.black.opacity(0.55))
         }
-        .padding(20)
-        .background(.black.opacity(0.55))
+    }
+
+    @ViewBuilder
+    private var processingOverlay: some View {
+        if controller.phase == .processing {
+            ProgressView("Analyse de la pièce…")
+                .tint(.white)
+                .foregroundStyle(.white)
+                .padding(24)
+                .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 16))
+        }
     }
 
     // MARK: - Résultat
@@ -135,6 +136,13 @@ struct ScanFlowView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Enregistrer") { save(scanned) }
                     .disabled(trimmedName.isEmpty)
+            }
+        } else if controller.isScanning {
+            // C'est l'arrêt de la session qui déclenche l'analyse et produit la
+            // pièce : sans ce bouton, un scan ne se conclut jamais.
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Terminer") { controller.finish() }
+                    .fontWeight(.semibold)
             }
         }
     }
