@@ -5,7 +5,12 @@ import SwiftUI
 import UIKit
 
 struct LibraryView: View {
-    @State private var store: RoomStore?
+    /// Créé une fois, tout de suite. Un chargement différé laissait une fenêtre
+    /// pendant laquelle la bibliothèque était absente sans que rien ne le
+    /// signale — l'écran de scan s'ouvrait alors vide.
+    @State private var storeResult: Result<RoomStore, any Error> = Result {
+        try RoomStore.documentsStore()
+    }
     @State private var entries: [RoomEntry] = []
     @State private var isScanning = false
     @State private var renaming: RoomEntry?
@@ -29,10 +34,18 @@ struct LibraryView: View {
             .safeAreaInset(edge: .bottom) { unavailabilityNotice }
         }
         .task { reload() }
-        .sheet(isPresented: $isScanning) {
-            if let store {
-                NavigationStack {
+        .fullScreenCover(isPresented: $isScanning) {
+            NavigationStack {
+                switch storeResult {
+                case .success(let store):
                     ScanFlowView(store: store) { reload() }
+                case .failure(let error):
+                    // Jamais d'écran vide : si la bibliothèque est inaccessible,
+                    // le dire plutôt que d'ouvrir une page noire.
+                    ContentUnavailableView(
+                        "Bibliothèque inaccessible",
+                        systemImage: "externaldrive.badge.exclamationmark",
+                        description: Text(error.localizedDescription))
                 }
             }
         }
@@ -114,7 +127,6 @@ struct LibraryView: View {
             } label: {
                 Label("Scanner une pièce", systemImage: "camera.viewfinder")
             }
-            .disabled(!RoomCaptureAvailability.isSupported)
         }
     }
 
@@ -134,12 +146,14 @@ struct LibraryView: View {
 
     // MARK: - Actions
 
+    /// La bibliothèque quand elle est accessible.
+    private var store: RoomStore? { try? storeResult.get() }
+
     private func reload() {
-        do {
-            let store = try self.store ?? RoomStore.documentsStore()
-            self.store = store
+        switch storeResult {
+        case .success(let store):
             entries = store.entries()
-        } catch {
+        case .failure(let error):
             failure = error.localizedDescription
         }
     }
