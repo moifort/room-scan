@@ -96,19 +96,24 @@ struct ScanFlowView: View {
     @ViewBuilder
     private func summary(for room: ScannedRoom) -> some View {
         VStack(spacing: 0) {
+            // La maquette prend tout l'espace restant : c'est elle qu'on vient
+            // regarder, le nommage tient en deux lignes.
             RoomMaquetteView(room: room)
-                .frame(maxWidth: .infinity)
-                .frame(height: 320)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Form {
-                Section("Nom de la pièce") {
-                    TextField("Salon", text: $name)
-                }
-                Section {
-                    Text(summaryLine(for: room))
-                        .foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Nom de la pièce", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .submitLabel(.done)
+
+                Text(summaryLine(for: room))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            .background(.bar)
         }
         .navigationTitle("Résultat du scan")
         .navigationBarTitleDisplayMode(.inline)
