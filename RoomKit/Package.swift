@@ -6,9 +6,12 @@ let package = Package(
     platforms: [.iOS("26.0"), .macOS("15.0")],
     products: [
         .library(name: "RoomModel", targets: ["RoomModel"]),
+        .library(name: "RoomGeometry", targets: ["RoomGeometry"]),
     ],
     targets: [
         .target(name: "RoomModel"),
+        .target(name: "RoomGeometry", dependencies: ["RoomModel"]),
         .testTarget(name: "RoomModelTests", dependencies: ["RoomModel"]),
+        .testTarget(name: "RoomGeometryTests", dependencies: ["RoomGeometry"]),
     ]
 )
