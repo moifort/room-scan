@@ -98,7 +98,7 @@ struct ScanFlowView: View {
         VStack(spacing: 0) {
             // La maquette prend tout l'espace restant : c'est elle qu'on vient
             // regarder, le nommage tient en deux lignes.
-            RoomMaquetteView(room: room)
+            RoomMaquetteView(room: room, modelURL: controller.modelURL)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             VStack(alignment: .leading, spacing: 8) {
@@ -158,7 +158,7 @@ struct ScanFlowView: View {
 
     private func save(_ room: ScannedRoom) {
         do {
-            try store.save(room, named: trimmedName)
+            try store.save(room, named: trimmedName, modelURL: controller.modelURL)
             onSaved()
             dismiss()
         } catch {

@@ -21,6 +21,11 @@ public final class RoomCaptureController {
 
     public private(set) var phase: Phase = .idle
 
+    /// Modèle 3D exporté par RoomPlan à la fin du scan. C'est le rendu
+    /// paramétrique d'Apple — celui de l'aperçu pendant la capture — nettement
+    /// plus fidèle que des volumes reconstruits à la main.
+    public private(set) var modelURL: URL?
+
     /// État observé au démarrage. Sert à expliquer un écran noir plutôt qu'à
     /// laisser l'utilisateur face à rien.
     public private(set) var diagnostics: [String] = []
@@ -88,7 +93,11 @@ public final class RoomCaptureController {
 
     // MARK: - Retours du délégué
 
-    func handleSuccess(_ room: ScannedRoom) {
+    func handleSuccess(_ room: ScannedRoom, modelURL: URL?) {
+        self.modelURL = modelURL
+        if modelURL == nil {
+            record("Modèle 3D non exporté : affichage de repli.")
+        }
         phase = .finished(room)
     }
 

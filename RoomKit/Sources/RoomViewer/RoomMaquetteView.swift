@@ -11,6 +11,7 @@ public struct RoomMaquetteView: View {
     private static let fieldOfView: Float = .pi / 3
 
     private let room: ScannedRoom
+    private let modelURL: URL?
 
     @State private var camera: OrbitCamera
     @State private var builder: RoomSceneBuilder
@@ -20,8 +21,9 @@ public struct RoomMaquetteView: View {
     @State private var selection: UUID?
     @State private var isInventoryPresented = false
 
-    public init(room: ScannedRoom) {
+    public init(room: ScannedRoom, modelURL: URL? = nil) {
         self.room = room
+        self.modelURL = modelURL
         _builder = State(initialValue: RoomSceneBuilder(room: room))
         _camera = State(initialValue: FrameFitting.initialCamera(
             for: room, verticalFieldOfView: RoomMaquetteView.fieldOfView, aspectRatio: 0.46))
@@ -31,7 +33,7 @@ public struct RoomMaquetteView: View {
         GeometryReader { geometry in
             ZStack {
                 RealityView { content in
-                    content.add(builder.buildScene())
+                    content.add(await builder.buildScene(modelURL: modelURL))
                     cameraEntity.camera.fieldOfViewInDegrees =
                         RoomMaquetteView.fieldOfView * 180 / .pi
                     content.add(cameraEntity)

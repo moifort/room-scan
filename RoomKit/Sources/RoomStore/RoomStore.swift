@@ -33,8 +33,12 @@ public struct RoomStore: Sendable {
 
     // MARK: - Écriture
 
+    /// `modelURL` est le modèle exporté par le scanner. Optionnel : une pièce
+    /// sans modèle reste consultable via la maquette reconstruite.
     @discardableResult
-    public func save(_ room: ScannedRoom, named name: String) throws -> RoomMetadata {
+    public func save(
+        _ room: ScannedRoom, named name: String, modelURL: URL? = nil
+    ) throws -> RoomMetadata {
         guard room.isUsable else { throw RoomStoreError.unusableScan }
 
         let metadata = RoomMetadata(name: name)
@@ -45,6 +49,11 @@ public struct RoomStore: Sendable {
             try encoder.encode(metadata).write(to: folder.appendingPathComponent("room.json"))
             let thumbnail = try ThumbnailRenderer.pngData(for: room)
             try thumbnail.write(to: folder.appendingPathComponent("thumbnail.png"))
+
+            if let modelURL {
+                try FileManager.default.copyItem(
+                    at: modelURL, to: folder.appendingPathComponent(RoomStore.modelFileName))
+            }
         } catch {
             // Ne pas laisser un dossier à moitié écrit derrière soi.
             try? FileManager.default.removeItem(at: folder)
@@ -100,7 +109,15 @@ public struct RoomStore: Sendable {
         return room
     }
 
+    /// Modèle 3D de la pièce, s'il a été enregistré avec elle.
+    public func modelURL(for id: UUID) -> URL? {
+        let url = directory(for: id).appendingPathComponent(RoomStore.modelFileName)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     // MARK: - Détails
+
+    static let modelFileName = "model.usdz"
 
     private func directory(for id: UUID) -> URL {
         rootDirectory.appendingPathComponent(id.uuidString, isDirectory: true)

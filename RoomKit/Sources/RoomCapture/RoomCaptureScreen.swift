@@ -53,11 +53,25 @@ public final class RoomCaptureCoordinator: NSObject, RoomCaptureViewDelegate, @u
             report(failure: error.localizedDescription)
             return
         }
-        // La traduction a lieu ici : au-delà ne circule qu'un `ScannedRoom`,
-        // qui traverse sans risque la frontière d'isolation.
+        // La traduction a lieu ici : au-delà ne circulent qu'un `ScannedRoom`
+        // et une URL, qui traversent sans risque la frontière d'isolation.
         let room = CapturedRoomTranslator.translate(processedResult)
+        let modelURL = exportModel(from: processedResult)
         let controller = controller
-        Task { @MainActor in controller.handleSuccess(room) }
+        Task { @MainActor in controller.handleSuccess(room, modelURL: modelURL) }
+    }
+
+    /// Exporte le modèle paramétrique — celui affiché par RoomPlan pendant le
+    /// scan. L'échec n'est pas bloquant : la maquette de repli reste affichable.
+    private func exportModel(from room: CapturedRoom) -> URL? {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("room-\(UUID().uuidString).usdz")
+        do {
+            try room.export(to: url, exportOptions: .parametric)
+            return url
+        } catch {
+            return nil
+        }
     }
 
     private func report(failure message: String) {

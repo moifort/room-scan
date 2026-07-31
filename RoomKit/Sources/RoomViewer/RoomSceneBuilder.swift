@@ -14,42 +14,116 @@ public final class RoomSceneBuilder {
     public private(set) var wallEntities: [UUID: Entity] = [:]
     public private(set) var furnitureEntities: [UUID: Entity] = [:]
 
+    private let selectionMarker = ModelEntity()
+
     private static let wallThickness: Float = 0.06
 
     public init(room: ScannedRoom) {
         self.room = room
     }
 
-    public func buildScene() -> Entity {
+    /// Construit la scène. Avec un modèle exporté par le scanner, c'est lui qui
+    /// est affiché — murs épais, ouvertures découpées, meubles reconnaissables.
+    /// Sans modèle, on retombe sur des volumes reconstruits depuis les mesures.
+    public func buildScene(modelURL: URL? = nil) async -> Entity {
         let root = Entity()
-        root.addChild(makeFloor())
-        for wall in room.walls {
-            let entity = makeWall(wall)
-            wallEntities[wall.id] = entity
-            root.addChild(entity)
+
+        if let modelURL, let model = try? await Entity(contentsOf: modelURL) {
+            root.addChild(model)
+            indexWalls(in: model)
+        } else {
+            root.addChild(makeFloor())
+            for wall in room.walls {
+                let entity = makeWall(wall)
+                wallEntities[wall.id] = entity
+                root.addChild(entity)
+            }
+            for opening in room.openings {
+                root.addChild(makeOpening(opening))
+            }
+            for piece in room.furniture {
+                let entity = makeFurniture(piece)
+                furnitureEntities[piece.id] = entity
+                root.addChild(entity)
+            }
         }
-        for opening in room.openings {
-            root.addChild(makeOpening(opening))
-        }
-        for piece in room.furniture {
-            let entity = makeFurniture(piece)
-            furnitureEntities[piece.id] = entity
-            root.addChild(entity)
-        }
+
+        root.addChild(makeSelectionMarker())
         root.addChild(makeLighting())
         return root
     }
 
-    /// Éclaircit le meuble sélectionné plutôt que de changer sa couleur : la
-    /// catégorie reste lisible pendant la sélection.
-    public func setHighlight(_ isHighlighted: Bool, forFurniture id: UUID) {
-        guard let entity = furnitureEntities[id] as? ModelEntity,
-              let piece = room.furniture.first(where: { $0.id == id })
-        else { return }
+    /// Retrouve les murs du modèle exporté pour pouvoir les masquer quand ils
+    /// passent devant la caméra. Les noms viennent du scanner : si la
+    /// convention change, on ne masque rien plutôt que de masquer au hasard.
+    private func indexWalls(in model: Entity) {
+        var byIdentifier: [UUID: Entity] = [:]
+        var remaining = room.walls
 
-        let base = FurniturePalette.color(for: piece.category)
-        let color = isHighlighted ? base.lightened(by: 0.35) : base
-        entity.model?.materials = [SimpleMaterial(color: color, isMetallic: false)]
+        func visit(_ entity: Entity) {
+            let name = entity.name.lowercased()
+            if name.contains("wall"), !remaining.isEmpty {
+                // Rapprocher chaque entité du mur mesuré le plus proche.
+                let position = entity.position(relativeTo: nil)
+                let ground = SIMD2(position.x, position.z)
+                let nearest = remaining.min {
+                    simd_distance($0.groundPosition, ground)
+                        < simd_distance($1.groundPosition, ground)
+                }
+                if let nearest {
+                    byIdentifier[nearest.id] = entity
+                    remaining.removeAll { $0.id == nearest.id }
+                }
+            }
+            for child in entity.children { visit(child) }
+        }
+
+        visit(model)
+        wallEntities = byIdentifier
+    }
+
+    /// Signale le meuble sélectionné. Une cage translucide posée autour de lui
+    /// plutôt qu'un changement de couleur : le modèle du scanner est un bloc
+    /// dont on ne connaît pas la structure interne, mais dont on connaît
+    /// exactement l'encombrement de chaque meuble.
+    public func setHighlight(_ isHighlighted: Bool, forFurniture id: UUID) {
+        guard isHighlighted, let piece = room.furniture.first(where: { $0.id == id }) else {
+            selectionMarker.isEnabled = false
+            return
+        }
+
+        selectionMarker.model?.mesh = .generateBox(
+            width: piece.footprint.x + 0.04,
+            height: piece.height + 0.04,
+            depth: piece.footprint.y + 0.04,
+            cornerRadius: 0.02)
+        selectionMarker.position = [piece.center.x, piece.height / 2, piece.center.z]
+        selectionMarker.orientation = simd_quatf(angle: piece.yaw, axis: [0, 1, 0])
+        selectionMarker.isEnabled = true
+
+        // Teinter aussi le volume quand c'est nous qui l'avons construit.
+        if let entity = furnitureEntities[id] as? ModelEntity {
+            entity.model?.materials = [SimpleMaterial(
+                color: FurniturePalette.color(for: piece.category).lightened(by: 0.35),
+                isMetallic: false)]
+        }
+    }
+
+    private func makeSelectionMarker() -> Entity {
+        selectionMarker.model = ModelComponent(
+            mesh: .generateBox(size: 0.01),
+            materials: [selectionMaterial])
+        selectionMarker.isEnabled = false
+        selectionMarker.name = "selection"
+        return selectionMarker
+    }
+
+    private var selectionMaterial: SimpleMaterial {
+        var material = SimpleMaterial()
+        material.color = .init(tint: UIColor.systemBlue.withAlphaComponent(0.35))
+        material.metallic = 0
+        material.roughness = 1
+        return material
     }
 
     // MARK: - Éléments
