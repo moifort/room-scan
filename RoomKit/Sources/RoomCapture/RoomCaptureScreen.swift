@@ -18,17 +18,16 @@ public enum RoomCaptureError: Error, LocalizedError {
     }
 }
 
-/// Reçoit les événements de RoomPlan et rend une pièce traduite.
+/// Reçoit les événements de RoomPlan et les transmet au contrôleur.
 ///
 /// Classe de premier niveau et non imbriquée : le protocole délégué de RoomPlan
 /// n'est pas isolé au main actor, ses méthodes sont donc appelées hors de lui et
 /// ne peuvent pas vivre dans un type isolé.
 public final class RoomCaptureCoordinator: NSObject, RoomCaptureViewDelegate, @unchecked Sendable {
-    private let onFinished: @MainActor @Sendable (Result<ScannedRoom, any Error>) -> Void
-    private var isRunning = false
+    private let controller: RoomCaptureController
 
-    init(onFinished: @escaping @MainActor @Sendable (Result<ScannedRoom, any Error>) -> Void) {
-        self.onFinished = onFinished
+    init(controller: RoomCaptureController) {
+        self.controller = controller
     }
 
     // `RoomCaptureViewDelegate` hérite de `NSCoding`. Ce coordinateur ne vit
@@ -38,76 +37,98 @@ public final class RoomCaptureCoordinator: NSObject, RoomCaptureViewDelegate, @u
 
     public required init?(coder: NSCoder) { nil }
 
-    @MainActor
-    func start(_ view: RoomCaptureView) {
-        guard !isRunning else { return }
-        isRunning = true
-        view.captureSession.run(configuration: RoomCaptureSession.Configuration())
-    }
-
-    @MainActor
-    func stop(_ view: RoomCaptureView) {
-        guard isRunning else { return }
-        isRunning = false
-        view.captureSession.stop()
-    }
-
     /// Accepter le post-traitement : c'est lui qui produit la pièce propre.
     public func captureView(
         shouldPresent roomDataForProcessing: CapturedRoomData, error: (any Error)?
     ) -> Bool {
         if let error {
-            finish(.failure(RoomCaptureError.failed(error.localizedDescription)))
+            report(failure: error.localizedDescription)
             return false
         }
         return true
     }
 
     public func captureView(didPresent processedResult: CapturedRoom, error: (any Error)?) {
-        isRunning = false
         if let error {
-            finish(.failure(RoomCaptureError.failed(error.localizedDescription)))
-        } else {
-            // La traduction a lieu ici : au-delà ne circule qu'un `ScannedRoom`,
-            // qui traverse sans risque la frontière d'isolation.
-            finish(.success(CapturedRoomTranslator.translate(processedResult)))
+            report(failure: error.localizedDescription)
+            return
         }
+        // La traduction a lieu ici : au-delà ne circule qu'un `ScannedRoom`,
+        // qui traverse sans risque la frontière d'isolation.
+        let room = CapturedRoomTranslator.translate(processedResult)
+        let controller = controller
+        Task { @MainActor in controller.handleSuccess(room) }
     }
 
-    private func finish(_ result: Result<ScannedRoom, any Error>) {
-        let callback = onFinished
-        Task { @MainActor in callback(result) }
+    private func report(failure message: String) {
+        let controller = controller
+        Task { @MainActor in controller.handleFailure(message) }
+    }
+}
+
+/// Héberge la vue de RoomPlan et démarre la session au bon moment.
+///
+/// Un contrôleur plutôt qu'une simple vue : `viewDidAppear` est le seul
+/// déclencheur qui garantit que la vue est posée **et** dimensionnée. Démarrée
+/// plus tôt, la session n'affiche rien et ne demande même pas l'accès caméra.
+public final class RoomCaptureHostController: UIViewController {
+    private let controller: RoomCaptureController
+    private let coordinator: RoomCaptureCoordinator
+    private var captureView: RoomCaptureView?
+
+    init(controller: RoomCaptureController, coordinator: RoomCaptureCoordinator) {
+        self.controller = controller
+        self.coordinator = coordinator
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { nil }
+
+    public override func viewDidLoad() {
+        super.viewDidLoad()
+
+        let capture = RoomCaptureView(frame: view.bounds)
+        capture.translatesAutoresizingMaskIntoConstraints = false
+        capture.delegate = coordinator
+        view.addSubview(capture)
+
+        NSLayoutConstraint.activate([
+            capture.topAnchor.constraint(equalTo: view.topAnchor),
+            capture.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            capture.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            capture.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+
+        captureView = capture
+        controller.attach(capture)
+    }
+
+    public override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        controller.startIfNeeded(viewSize: captureView?.bounds.size ?? view.bounds.size)
     }
 }
 
 /// Écran de capture fourni par RoomPlan : guidage, surlignage temps réel et
-/// animation de fin. On n'écrit que la traduction du résultat.
-public struct RoomCaptureScreen: UIViewRepresentable {
-    private let onFinished: @MainActor @Sendable (Result<ScannedRoom, any Error>) -> Void
+/// animation de fin. On n'écrit que le pilotage et la traduction du résultat.
+public struct RoomCaptureScreen: UIViewControllerRepresentable {
+    private let controller: RoomCaptureController
 
-    public init(
-        onFinished: @escaping @MainActor @Sendable (Result<ScannedRoom, any Error>) -> Void
-    ) {
-        self.onFinished = onFinished
+    public init(controller: RoomCaptureController) {
+        self.controller = controller
     }
 
-    public func makeUIView(context: Context) -> RoomCaptureView {
-        let view = RoomCaptureView(frame: .zero)
-        view.delegate = context.coordinator
-        context.coordinator.start(view)
-        return view
+    public func makeUIViewController(context: Context) -> RoomCaptureHostController {
+        RoomCaptureHostController(controller: controller, coordinator: context.coordinator)
     }
 
-    public func updateUIView(_ view: RoomCaptureView, context: Context) {}
+    public func updateUIViewController(
+        _ uiViewController: RoomCaptureHostController, context: Context
+    ) {}
 
     public func makeCoordinator() -> RoomCaptureCoordinator {
-        RoomCaptureCoordinator(onFinished: onFinished)
-    }
-
-    public static func dismantleUIView(
-        _ view: RoomCaptureView, coordinator: RoomCaptureCoordinator
-    ) {
-        MainActor.assumeIsolated { coordinator.stop(view) }
+        RoomCaptureCoordinator(controller: controller)
     }
 }
 #endif
