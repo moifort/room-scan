@@ -1,4 +1,5 @@
 #if os(iOS)
+import ARKit
 import RoomModel
 import RoomPlan
 import SwiftUI
@@ -102,7 +103,9 @@ public final class RoomCaptureHostController: UIViewController {
     public override func viewDidLoad() {
         super.viewDidLoad()
 
-        let capture = RoomCaptureView(frame: view.bounds)
+        // RoomPlan runs on the controller's session, which the dressing pass
+        // then keeps running.
+        let capture = RoomCaptureView(frame: view.bounds, arSession: controller.arSession)
         capture.translatesAutoresizingMaskIntoConstraints = false
         capture.delegate = coordinator
         view.addSubview(capture)
