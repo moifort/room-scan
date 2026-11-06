@@ -46,7 +46,10 @@ public enum RealisticSceneBuilder {
         // The photos already contain the room's light: no shading on top.
         material.lightingModel = .constant
         material.diffuse.contents = UIColor.white
-        material.isDoubleSided = true
+        // One-sided: ARKit faces look towards where the sensor stood, i.e.
+        // into the room. Seen from outside, walls and ceiling vanish and the
+        // room opens like a doll's house; from inside, everything shows.
+        material.isDoubleSided = false
         geometry.materials = [material]
         return SCNNode(geometry: geometry)
     }

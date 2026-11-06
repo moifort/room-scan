@@ -164,6 +164,15 @@ public struct RealisticRoomView: View {
     /// Stands in the middle of the captured floor: the scan's floor outline is
     /// a bounding rectangle, whose centre can sit outside an L-shaped room.
     static func initialVisitor(for mesh: DressedMesh, room: ScannedRoom?) -> FirstPersonCamera {
+        // Near a corner, facing the middle: the whole room in one glance, and
+        // furniture usually stands elsewhere than in the corner's path.
+        if let room, !room.floor.isEmpty {
+            let center = room.floor.center
+            let standing = center + (room.floor.minimumCorner - center) * 0.6
+            let toCenter = center - standing
+            return FirstPersonCamera(floorPoint: standing, floorHeight: room.floorHeight,
+                                     yaw: atan2(-toCenter.x, -toCenter.y))
+        }
         var floorSum = SIMD2<Float>.zero
         var floorCount = 0
         for t in 0..<mesh.triangleCount where mesh.faceClasses[t] == MeshClass.floor.rawValue {
