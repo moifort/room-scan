@@ -23,6 +23,11 @@ targets:
         product: RoomViewer
       - package: RoomKit
         product: RoomCapture
+      - package: RoomKit
+        product: RoomDressing
+    settings:
+      base:
+        DEVELOPMENT_TEAM: 46C337T7YN
     info:
       path: App/Info.plist
       properties:

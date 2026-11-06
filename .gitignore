@@ -4,3 +4,5 @@
 *.xcworkspace
 xcuserdata/
 scans/
+build/
+.claude/
