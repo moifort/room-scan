@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 scan_dir = Path(sys.argv[1])
+WITH_FURNITURE = "--furniture" in sys.argv[2:]
 scan = json.loads((scan_dir / "scan.json").read_text())
 meta = json.loads((scan_dir / "room.json").read_text())
 
@@ -110,7 +111,8 @@ add('<polygon points="' + " ".join(f"{P(*p)[0]:.1f},{P(*p)[1]:.1f}" for p in pts
 CAT = {"television": "TV", "chair": "Chaise", "table": "Table", "storage": "Rangement",
        "sofa": "Canapé", "bed": "Lit", "refrigerator": "Frigo", "sink": "Évier"}
 furn = sorted(scan["furniture"], key=lambda f: (CAT.get(f["category"], f["category"]), -f["footprint"][0]))
-furn = []  # furniture left off the plan on purpose
+if not WITH_FURNITURE:
+    furn = []
 badges = []
 for i, f in enumerate(furn, 1):
     cx, cz = rot(f["center"][0], f["center"][2])
@@ -229,10 +231,18 @@ for g in poly:
         add(f'<rect x="{x0}" y="{y - 10}" width="10" height="10" rx="2" fill="{COL[o["kind"]]}"/>')
         line(f'{o["label"]}  {KIND[o["kind"]]} {fmt(o["w"])} × {fmt(o["h"])}{extra}', x=x0 + 16)
 y += 10
+if furn:
+    line("Meubles détectés (L × P × H)", 15, "700", dy=24)
+    CONF = {"high": "sûr", "medium": "moyen", "low": "incertain"}
+    for f in furn:
+        fw, fd = f["footprint"]
+        line(f'{f["n"]}. {CAT.get(f["category"], f["category"])} {fmt(fw)} × {fmt(fd)} × {fmt(f["height"])}'
+             f'  ({CONF[f["confidence"]]})', 12, dy=18)
+    line("Plus le bleu est foncé, plus la détection est sûre.", 11, color="#6e6e73", dy=16)
 y += 12
 line("Cotes grises : distances angle → ouverture", 11, color="#6e6e73", dy=16)
 line("le long de chaque mur. Cote noire : mur entier.", 11, color="#6e6e73", dy=16)
 
 add("</svg>")
-(scan_dir / "plan.svg").write_text("\n".join(out))
+(scan_dir / ("plan-meubles.svg" if WITH_FURNITURE else "plan.svg")).write_text("\n".join(out))
 print(f"area={area:.2f} perimeter={perimeter:.2f} size={SVG_W:.0f}x{SVG_H:.0f}")
