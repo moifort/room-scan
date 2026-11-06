@@ -1,4 +1,5 @@
 import Foundation
+import RoomDressing
 import RoomModel
 
 /// Une pièce telle qu'elle apparaît dans la bibliothèque, sans charger sa
@@ -35,9 +36,12 @@ public struct RoomStore: Sendable {
 
     /// `modelURL` est le modèle exporté par le scanner. Optionnel : une pièce
     /// sans modèle reste consultable via la maquette reconstruite.
+    /// `dressing` apporte la vue réaliste : maillage coloré, photos et leur
+    /// manifeste sont copiés, les cartes de profondeur non.
     @discardableResult
     public func save(
-        _ room: ScannedRoom, named name: String, modelURL: URL? = nil
+        _ room: ScannedRoom, named name: String, modelURL: URL? = nil,
+        dressing: DressingWorkspace? = nil
     ) throws -> RoomMetadata {
         guard room.isUsable else { throw RoomStoreError.unusableScan }
 
@@ -53,6 +57,9 @@ public struct RoomStore: Sendable {
             if let modelURL {
                 try FileManager.default.copyItem(
                     at: modelURL, to: folder.appendingPathComponent(RoomStore.modelFileName))
+            }
+            if let dressing {
+                try copyDressing(dressing, into: folder)
             }
         } catch {
             // Ne pas laisser un dossier à moitié écrit derrière soi.
@@ -115,7 +122,27 @@ public struct RoomStore: Sendable {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
+    /// Maillage réaliste de la pièce, si elle a été habillée.
+    public func realisticMeshURL(for id: UUID) -> URL? {
+        let url = directory(for: id).appendingPathComponent(DressedMeshFile.fileName)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     // MARK: - Détails
+
+    private func copyDressing(_ dressing: DressingWorkspace, into folder: URL) throws {
+        let fm = FileManager.default
+        try fm.copyItem(at: dressing.meshURL,
+                        to: folder.appendingPathComponent(DressedMeshFile.fileName))
+        try fm.copyItem(at: dressing.photosDirectory,
+                        to: folder.appendingPathComponent("photos", isDirectory: true))
+        try fm.copyItem(at: dressing.manifestURL,
+                        to: folder.appendingPathComponent(KeyframeManifest.fileName))
+        let log = dressing.root.appendingPathComponent("dressing.log")
+        if fm.fileExists(atPath: log.path) {
+            try fm.copyItem(at: log, to: folder.appendingPathComponent("dressing.log"))
+        }
+    }
 
     static let modelFileName = "model.usdz"
 
