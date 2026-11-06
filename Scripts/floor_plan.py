@@ -6,6 +6,12 @@ from pathlib import Path
 
 scan_dir = Path(sys.argv[1])
 WITH_FURNITURE = "--furniture" in sys.argv[2:]
+# --layout file.json draws a proposed arrangement instead of the scanned
+# furniture. Coordinates are plan metres: x to the right, y downwards, origin
+# at the top-left corner of the drawn plan.
+LAYOUT = None
+if "--layout" in sys.argv:
+    LAYOUT = json.loads(Path(sys.argv[sys.argv.index("--layout") + 1]).read_text())
 scan = json.loads((scan_dir / "scan.json").read_text())
 meta = json.loads((scan_dir / "room.json").read_text())
 
@@ -98,10 +104,11 @@ add = out.append
 add(f'<svg xmlns="http://www.w3.org/2000/svg" width="{SVG_W:.0f}" height="{SVG_H:.0f}" '
     f'viewBox="0 0 {SVG_W:.0f} {SVG_H:.0f}" font-family="-apple-system, Helvetica, Arial, sans-serif">')
 add(f'<rect x="0" y="0" width="{SVG_W:.0f}" height="{SVG_H:.0f}" fill="#ffffff"/>')
-add(f'<text x="{MARGIN - 60}" y="42" font-size="26" font-weight="700" fill="#1d1d1f">'
-    f'{meta["name"]} — plan vu du dessus</text>')
-add(f'<text x="{MARGIN - 60}" y="66" font-size="14" fill="#6e6e73">Scan RoomPlan du '
-    f'{meta["createdAt"][:10]} · cotes en mètres · précision ± quelques cm</text>')
+title = f'{meta["name"]} — {LAYOUT["name"]}' if LAYOUT else f'{meta["name"]} — plan vu du dessus'
+subtitle = (LAYOUT.get("subtitle", "") if LAYOUT
+            else f'Scan RoomPlan du {meta["createdAt"][:10]} · cotes en mètres · précision ± quelques cm')
+add(f'<text x="{MARGIN - 60}" y="42" font-size="26" font-weight="700" fill="#1d1d1f">{title}</text>')
+add(f'<text x="{MARGIN - 60}" y="66" font-size="14" fill="#6e6e73">{subtitle}</text>')
 
 # Floor.
 add('<polygon points="' + " ".join(f"{P(*p)[0]:.1f},{P(*p)[1]:.1f}" for p in pts)
@@ -113,18 +120,27 @@ CAT = {"television": "TV", "chair": "Chaise", "table": "Table", "storage": "Rang
 furn = sorted(scan["furniture"], key=lambda f: (CAT.get(f["category"], f["category"]), -f["footprint"][0]))
 if not WITH_FURNITURE:
     furn = []
+
+
+def rect_corners(cx, cz, fw, fd, yaw):
+    ux, uz = math.cos(yaw), -math.sin(yaw)
+    vx, vz = -uz, ux
+    return [(cx + sx * ux * fw / 2 + sz * vx * fd / 2, cz + sx * uz * fw / 2 + sz * vz * fd / 2)
+            for sx, sz in [(-1, -1), (1, -1), (1, 1), (-1, 1)]]
+
+
+def poly_svg(corners, **attrs):
+    a = " ".join(f'{k.replace("_", "-")}="{v}"' for k, v in attrs.items())
+    add('<polygon points="' + " ".join(f"{P(*q)[0]:.1f},{P(*q)[1]:.1f}" for q in corners) + f'" {a}/>')
+
+
 badges = []
 for i, f in enumerate(furn, 1):
     cx, cz = rot(f["center"][0], f["center"][2])
-    yaw = f["yaw"] - ref_yaw
     fw, fd = f["footprint"]
-    ux, uz = math.cos(yaw), -math.sin(yaw)
-    vx, vz = -uz, ux
-    corners = [(cx + sx * ux * fw / 2 + sz * vx * fd / 2, cz + sx * uz * fw / 2 + sz * vz * fd / 2)
-               for sx, sz in [(-1, -1), (1, -1), (1, 1), (-1, 1)]]
+    corners = rect_corners(cx, cz, fw, fd, f["yaw"] - ref_yaw)
     op = {"high": 0.55, "medium": 0.4, "low": 0.25}[f["confidence"]]
-    add('<polygon points="' + " ".join(f"{P(*q)[0]:.1f},{P(*q)[1]:.1f}" for q in corners)
-        + f'" fill="#4a90d9" fill-opacity="{op}" stroke="#2f6fb5" stroke-width="1"/>')
+    poly_svg(corners, fill="#4a90d9", fill_opacity=op, stroke="#2f6fb5", stroke_width=1)
     px, py = P(cx, cz)
     while any(math.dist((px, py), q) < 24 for q in badges):
         py += 24
@@ -133,6 +149,51 @@ for i, f in enumerate(furn, 1):
     add(f'<text x="{px:.1f}" y="{py + 4:.1f}" font-size="11" font-weight="600" text-anchor="middle" '
         f'fill="#2f6fb5">{i}</text>')
     f["n"] = i
+
+# Proposed layout: furniture placed by hand, zones and circulation paths.
+FILL = {"seat": ("#4a90d9", "#2f6fb5"), "storage": ("#8e8e93", "#5c5c61"),
+        "table": ("#d9b36b", "#a8843a"), "tv": ("#1d1d1f", "#1d1d1f")}
+layout_items = LAYOUT["furniture"] if LAYOUT else []
+for it in layout_items:
+    cx, cz = it["x"] + minx, it["y"] + minz
+    yaw = math.radians(it.get("rot", 0))
+    corners = rect_corners(cx, cz, it["w"], it["d"], yaw)
+    fill, stroke = FILL[it.get("type", "seat")]
+    if it.get("clear"):  # room needed around it, e.g. pulled-out chairs
+        m = it["clear"]
+        mw, md = (m, m) if isinstance(m, (int, float)) else m
+        poly_svg(rect_corners(cx, cz, it["w"] + 2 * mw, it["d"] + 2 * md, yaw), fill="none",
+                 stroke=stroke, stroke_width=1, stroke_dasharray="5 4", stroke_opacity=0.7)
+    poly_svg(corners, fill=fill, fill_opacity=0.9 if it.get("type") == "tv" else 0.35,
+             stroke=stroke, stroke_width=1.2)
+    px, py = P(cx, cz)
+    if it.get("type") == "tv":
+        continue
+    along_x = abs(math.cos(yaw)) > 0.7
+    long_side, short_side = (it["w"], it["d"]) if along_x else (it["d"], it["w"])
+    if min(it["w"], it["d"]) >= 0.45 and max(it["w"], it["d"]) >= 0.8:
+        angle = 0 if (it["w"] >= it["d"]) == along_x else -90
+        add(f'<text x="{px:.1f}" y="{py:.1f}" dy="0.35em" font-size="11" font-weight="600" fill="{stroke}" '
+            f'text-anchor="middle" transform="rotate({angle} {px:.1f} {py:.1f})">{it["n"]} · {it["label"]}</text>')
+    else:
+        add(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="9" fill="#ffffff" stroke="{stroke}"/>')
+        add(f'<text x="{px:.1f}" y="{py + 3.5:.1f}" font-size="10" font-weight="600" text-anchor="middle" '
+            f'fill="{stroke}">{it["n"]}</text>')
+for z in (LAYOUT or {}).get("zones", []):
+    px, py = P(z["x"] + minx, z["y"] + minz)
+    add(f'<text x="{px:.1f}" y="{py:.1f}" font-size="13" font-style="italic" font-weight="600" '
+        f'fill="#aeaeb2" text-anchor="middle">{z["label"]}</text>')
+for path in (LAYOUT or {}).get("paths", []):
+    pix = [P(p[0] + minx, p[1] + minz) for p in path]
+    d = " ".join(f'{"M" if i == 0 else "L"} {x:.1f} {y:.1f}' for i, (x, y) in enumerate(pix))
+    add(f'<path d="{d}" fill="none" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="6 5" '
+        f'stroke-opacity="0.75"/>')
+    # Arrowhead drawn by hand: SVG markers are not rendered by every rasterizer.
+    (x1, y1), (x2, y2) = pix[-2], pix[-1]
+    L = math.hypot(x2 - x1, y2 - y1) or 1
+    ux, uy = (x2 - x1) / L, (y2 - y1) / L
+    tip = [(x2, y2), (x2 - 10 * ux + 4 * uy, y2 - 10 * uy - 4 * ux), (x2 - 10 * ux - 4 * uy, y2 - 10 * uy + 4 * ux)]
+    add('<polygon points="' + " ".join(f"{x:.1f},{y:.1f}" for x, y in tip) + '" fill="#c0392b" fill-opacity="0.85"/>')
 
 
 def dim_line(a, b, offset, label, size=13, color="#1d1d1f", weight="600"):
@@ -239,10 +300,27 @@ if furn:
         line(f'{f["n"]}. {CAT.get(f["category"], f["category"])} {fmt(fw)} × {fmt(fd)} × {fmt(f["height"])}'
              f'  ({CONF[f["confidence"]]})', 12, dy=18)
     line("Plus le bleu est foncé, plus la détection est sûre.", 11, color="#6e6e73", dy=16)
+if LAYOUT:
+    line("Meubles (L × P)", 15, "700", dy=24)
+    for it in layout_items:
+        if it.get("type") == "tv":
+            continue
+        line(f'{it["n"]}. {it["label"]} {fmt(it["w"])} × {fmt(it["d"])}', 12, dy=17)
+    y += 8
+    line("Pourquoi", 15, "700", dy=22)
+    for note in LAYOUT.get("notes", []):
+        bold = note.startswith("!")
+        line(note.lstrip("!"), 12, "600" if bold else "400", "#c0392b" if bold else "#1d1d1f", dy=17)
+    y += 8
+    line("Pointillés : dégagement des chaises. Flèches : circulations.", 11, color="#6e6e73", dy=16)
 y += 12
 line("Cotes grises : distances angle → ouverture", 11, color="#6e6e73", dy=16)
 line("le long de chaque mur. Cote noire : mur entier.", 11, color="#6e6e73", dy=16)
 
 add("</svg>")
-(scan_dir / ("plan-meubles.svg" if WITH_FURNITURE else "plan.svg")).write_text("\n".join(out))
+if LAYOUT:
+    out_name = f'plan-{LAYOUT["slug"]}.svg'
+else:
+    out_name = "plan-meubles.svg" if WITH_FURNITURE else "plan.svg"
+(scan_dir / out_name).write_text("\n".join(out))
 print(f"area={area:.2f} perimeter={perimeter:.2f} size={SVG_W:.0f}x{SVG_H:.0f}")
