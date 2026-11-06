@@ -49,11 +49,27 @@ public struct FloorOutline: Codable, Hashable, Sendable {
         return simd_length(size) / 2
     }
 
-    private var minimumCorner: SIMD2<Float> {
+    public var minimumCorner: SIMD2<Float> {
         points.reduce(SIMD2(repeating: .greatestFiniteMagnitude), simd_min)
     }
 
-    private var maximumCorner: SIMD2<Float> {
+    public var maximumCorner: SIMD2<Float> {
         points.reduce(SIMD2(repeating: -.greatestFiniteMagnitude), simd_max)
+    }
+
+    /// Vrai si le point (x, z) est à l'intérieur du polygone.
+    public func contains(_ point: SIMD2<Float>) -> Bool {
+        guard points.count > 2 else { return false }
+        var inside = false
+        var j = points.count - 1
+        for i in points.indices {
+            let a = points[i], b = points[j]
+            if (a.y > point.y) != (b.y > point.y),
+               point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x {
+                inside.toggle()
+            }
+            j = i
+        }
+        return inside
     }
 }

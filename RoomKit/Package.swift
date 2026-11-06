@@ -22,6 +22,6 @@ let package = Package(
         .testTarget(name: "RoomModelTests", dependencies: ["RoomModel"]),
         .testTarget(name: "RoomGeometryTests", dependencies: ["RoomGeometry"]),
         .testTarget(name: "RoomStoreTests", dependencies: ["RoomStore"]),
-        .testTarget(name: "RoomDressingTests", dependencies: ["RoomDressing"]),
+        .testTarget(name: "RoomDressingTests", dependencies: ["RoomDressing", "RoomModel"]),
     ]
 )

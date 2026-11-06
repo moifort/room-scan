@@ -28,4 +28,10 @@ public struct ScannedRoom: Codable, Hashable, Sendable {
 
     /// Hauteur sous plafond estimée, à partir du mur le plus haut.
     public var ceilingHeight: Float { walls.map(\.height).max() ?? 2.5 }
+
+    /// Altitude du sol dans le repère du scan : la base moyenne des murs.
+    public var floorHeight: Float {
+        guard !walls.isEmpty else { return 0 }
+        return walls.map { $0.center.y - $0.height / 2 }.reduce(0, +) / Float(walls.count)
+    }
 }
