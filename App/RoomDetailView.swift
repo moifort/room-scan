@@ -8,7 +8,7 @@ struct RoomDetailView: View {
     let store: RoomStore
     let entry: RoomEntry
 
-    enum Presentation: Hashable { case maquette, realistic }
+    enum Presentation: Hashable { case maquette, plan, realistic }
 
     @State private var room: ScannedRoom?
     @State private var modelURL: URL?
@@ -22,6 +22,8 @@ struct RoomDetailView: View {
                 if presentation == .realistic, let realisticMesh {
                     RealisticRoomView(mesh: realisticMesh, room: room)
                         .ignoresSafeArea(edges: .bottom)
+                } else if presentation == .plan {
+                    FloorPlanView(room: room)
                 } else {
                     RoomMaquetteView(room: room, modelURL: modelURL)
                         .ignoresSafeArea(edges: .bottom)
@@ -37,16 +39,17 @@ struct RoomDetailView: View {
         .navigationTitle(entry.metadata.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            // Only rooms whose realistic mesh decodes offer the choice.
-            if realisticMesh != nil {
-                ToolbarItem(placement: .principal) {
-                    Picker("Vue", selection: $presentation) {
-                        Text("Maquette").tag(Presentation.maquette)
+            ToolbarItem(placement: .principal) {
+                Picker("Vue", selection: $presentation) {
+                    Text("Maquette").tag(Presentation.maquette)
+                    Text("Plan").tag(Presentation.plan)
+                    // Only rooms whose realistic mesh decodes offer it.
+                    if realisticMesh != nil {
                         Text("Réaliste").tag(Presentation.realistic)
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 220)
                 }
+                .pickerStyle(.segmented)
+                .frame(width: realisticMesh != nil ? 280 : 200)
             }
         }
         .task {

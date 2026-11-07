@@ -20,7 +20,7 @@ let package = Package(
         .target(name: "RoomViewer", dependencies: ["RoomModel", "RoomGeometry", "RoomDressing"]),
         .target(name: "RoomCapture", dependencies: ["RoomModel", "RoomGeometry", "RoomDressing"]),
         .testTarget(name: "RoomModelTests", dependencies: ["RoomModel"]),
-        .testTarget(name: "RoomGeometryTests", dependencies: ["RoomGeometry"]),
+        .testTarget(name: "RoomGeometryTests", dependencies: ["RoomGeometry"], resources: [.copy("Fixtures")]),
         .testTarget(name: "RoomStoreTests", dependencies: ["RoomStore"]),
         .testTarget(name: "RoomDressingTests", dependencies: ["RoomDressing", "RoomModel"]),
     ]
